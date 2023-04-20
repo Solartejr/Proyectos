@@ -1,0 +1,391 @@
+---
+title: "Proyecto final - Curso de análisis de datos"
+author: "Francisco J. Solarte B."
+date: "2023-04-07"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Proyecto final - Análisis de datos - Cyclist - Ene 2022 a Mar 2023
+
+## Caso práctico: ¿Cómo lograr el éxito rápido de un negocio de bicicletas compartidas?
+
+### Punto 1: **Preguntar**
+
+Principalmente, debemos contestar la pregunta: *1. ¿En qué se diferencian los socios anuales y los ciclistas ocasionales con respecto al uso de las bicicletas de Cyclistic?*
+
+Cyclistic es una empresa que alquila bicicletas en diferentes puntos en la ciudad de chicago. tiene una flota de 5.824 bicicletas que circulan entre 692 estaciones distribuidas por toda la ciudad.
+
+El problema que tiene Cyclistic en este momento es que dentro de sus tipos de membresias:
+
+1.  **Miembros anuales:** Pagan un monto anual para usar los servicios de Cyclistic.
+
+2.  **Pases de un solo viaje:** Pagan por un solo viaje entre estaciones.
+
+3.  **Pases de día completo** Pagan por usar los servicios de la compañia durante un día.
+
+De esta forma Cyclistic cuenta con dos tipos de miembros: `Miembros` que compran membresias anuales y `Ocasionales` que compran los pases de un solo viaje y de día completo.
+
+El **Problema** de Cyclistic es que sus miembros anuales son mucho más rentables que los ocasionales, así que desean aumentar la cantidad de miembros que se suscriben por años completos.
+
+Para esto, analizaremos una base de datos de 15 meses, correspondientes a los meses entre Enero del 2022 y Marzo del 2023, 5 trimestres. esta base de datos contiene los viajes realizados por los usuarios de la compañia durante este tiempo.
+
+Analizando los datos, esperamos encontrar patrones de comportamiento de los usuarios y ayudar a Cyclistic a fidelizar mejor a sus usuarios.
+
+Con el resultado del análisis el equipo de marketing podrá utilizar los datos para lograr nuestro objetivo.
+
+La *tarea empresarial* es utilizar los datos brindados por la empresa para identificar cuales son los comportamientos de alquiler de bicicletas de los usuarios que son miembros y los que son usuarios casuales. la empresa quiere aumentar la cantidad de usuarios con membresia ya que son más retables financieramente.
+
+### Punto 2: **Preparar**
+
+Para preparar los datos para la exploración, debemos revisar su origen y la forma en la que están presentados:
+
+1.  Los datos están ubicados en el `servicio aws` (Amazon Web Service) y están en el siguiente [link de datos de Cyclistic](https://divvy-tripdata.s3.amazonaws.com/index.html)
+
+**Nota importante:** Los datos suministrados tienen el nombre de otra compañia y fueron proporcionados por Motivate International Inc. bajo la licencia proporcionada en este [link](https://ride.divvybikes.com/data-license-agreement)
+
+2.  Los datos están organizados por mes y año, al abrir los datos podemos ver que están clasificados de la siguiente forma:
+
+-   Id de viaje
+-   Tipo de bicicleta
+-   Coordenadas de salida y llegada de viaje
+-   Estaciones de salida y llegada del viaje
+-   Fecha y hora del viaje
+-   Tipo de usuario: Casual o Miembro
+
+Si bien la sugerencia es descargar los últimos 12 meses de viajes, tome la decisión de descargar 15 meses, para poder realizar comparaciones de los trimestres.
+
+3.  Teniendo en cuenta la licencia brindada por `Motivate` podemos confiar en estos datos.
+
+### Punto 3: **Procesar**
+
+Teniendo en cuenta la magnitud y el tamaño de los datos, Decidi utilizar `r`y la versión de escritorio de `rstudio` para análizar los datos.
+
+Revisé los datos y uni los archivos utilizando `readr`gracias a un post de un usuario de rStudio, que encontré en este [link](https://community.rstudio.com/t/how-to-import-multiple-csv-files/119449/2)
+
+```{r}
+library(readr)
+lista_de_archivos <- list.files(path="~/Cursos Google/Proyecto final - Curso de análisis de datos/Datos de los últimos  15 meses - Ene 2022 a Mar 2023",
+                                recursive=TRUE,
+                                pattern= "\\.csv$",
+                                full.names = TRUE)
+
+Base_de_viajes_15_meses_original <- readr::read_csv(lista_de_archivos,id="Archivo_general_datos")
+
+```
+
+De esta forma obtuve una sola base de datos de 6.307.141 Viajes realizados durante 15 meses, al utilizar directamente los archivos descargados, a continuación, se debe cargar la libreria `tidyverse` `dplyr`y `reshape`que vamos a usar:
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(reshape2)
+```
+
+Vamos a analizar estos datos:
+
+```{r}
+colnames(Base_de_viajes_15_meses_original)
+```
+
+13 columnas que nos muestran los datos y como están divididos.**Nota:** *la columna No.1 llamada: Archivo general datos se crea como una referencia al archivo del cual provienen los datos en nuestro listado.*
+
+Vamos a utilizar `glimpse()`para analizar la forma en que se presentan los datos:
+
+```{r}
+glimpse(Base_de_viajes_15_meses_original)
+
+```
+
+Tambien lo podemos revisar con `head()`
+
+```{r}
+head(Base_de_viajes_15_meses_original)
+```
+
+Se puede identificar como están organizados los datos.
+
+Vamos a utilizar `summary()`para revisar como están distribuidos los datos:
+
+```{r}
+summary(Base_de_viajes_15_meses_original)
+```
+
+De este análisis es importante resaltar que existen 6.284 Viajes que no tienen coordenadas de destino `end_lat`y `end_lng`
+
+Al inspeccionar los demás datos, podemos observar que las horas de inicio y fin son coherentes a la información descargada, no hay faltantes en los nombres de estaciones y todos los datos de `ride_id` están completos.
+
+Vamos a proceder a limpiar la base de datos de las filas que contengan espacios vacios o `N/A`:
+
+```{r}
+Base_de_viajes_15_meses <- na.omit(Base_de_viajes_15_meses_original)
+```
+Vamos a anadir una columna para contar los datos:
+```{r}
+Base_de_viajes_15_meses$n = 1
+```
+Para poder procesar los datos en el análisis, crearemos la columna `ride_lenght` que nos indicará la duración del viaje.
+
+Utilizaremos los siguientes comandos:
+
+`difftime`para conocer la diferencia de tiempos entre las dos variables `ended_at`y `started_at`
+
+Y el comando `as_hms`para transformar este resultados a horas minutos y segundos.
+
+Se debe iniciar cargando la libreria `hms`que contiene `hms`
+
+```{r}
+library(hms)
+Base_de_viajes_15_meses$ride_length <-difftime(Base_de_viajes_15_meses$ended_at,Base_de_viajes_15_meses$started_at,units = "mins")
+```
+
+Calcularemos una columna llama `Day_of_the_week`para saber en que día de la semana se realizan los viajes:
+```{r}
+Base_de_viajes_15_meses$Day_of_the_week <- weekdays(Base_de_viajes_15_meses$started_at)
+```
+
+Vamos a dividr tambien los datos en meses y en años:
+```{r}
+Base_de_viajes_15_meses$Months <- substr(Base_de_viajes_15_meses$started_at,start=1,stop=7)
+```
+Haremos una columna con la hora del día en que se realizaron los viajes:
+```{r}
+Base_de_viajes_15_meses$Hour <- substr(Base_de_viajes_15_meses$started_at,start=12,stop=13)
+```
+
+Teniendo en cuenta que se nos proporcionan coordenadas, vamos a realizar una columna que calcule la distancia proporcional entre cada uno de los puntos, para poder aprovechar este item que parece importante.
+
+Ahora calcularemos la distancia aproximada entre estaciones:
+
+***Nota*** la distancia calculada no corresponde a una hipotenusa entre los dos puntos, ya que los desplazamientos se realizan sobre calles y carreras, no en diagonal. **multiplicamos por 111 ya que es un aproximado de kilometros en las coordenadas**
+
+```{r}
+Base_de_viajes_15_meses$Distance = abs(Base_de_viajes_15_meses$end_lat-Base_de_viajes_15_meses$start_lat)*111+abs(Base_de_viajes_15_meses$end_lng-Base_de_viajes_15_meses$start_lng)*111
+```
+Para hacer una prueba de los resultados, creare una tabla que muestre la distancia promedio según tipo de usuario:
+```{r}
+Distancia_segun_usuario <- group_by(Base_de_viajes_15_meses,member_casual) %>%
+                                summarise(
+                                  Distance_promedio = mean(Distance)
+                                )
+Distancia_segun_usuario
+```
+
+
+### Punto 4: **Analizar**
+
+
+Para este punto, tenemos los datos revisados y organizados según las columnas que deseamos organizar. Vamos a realizar un análisis descripitivo:
+
+Vamos a calcular la media de `ride_lenght`:
+
+```{r}
+
+Por_tiempo_de_uso <- group_by(Base_de_viajes_15_meses,member_casual) %>%
+                        summarise(Tiempo_total = mean(ride_length)
+                                  )
+            
+Por_tiempo_de_uso
+```
+El tiempo de uso de los miembros casuales es casi el doble de los miembros.
+
+Vamos a calcular el viaje más largo de cada uno de los usuarios:
+```{r}
+
+Viaje_mas_largo <- group_by(Base_de_viajes_15_meses,member_casual) %>%
+                    summarise(Tiempo_maximo = max(ride_length)
+                              )
+Viaje_mas_largo
+```
+Este dato no es muy relevante, hay un viaje de un usuario casual que duró más de un mes.
+
+
+Análisis según usuario y dia de la semana:
+```{r}
+Tiempo_promedio_viaje_por_dia <- dcast(Base_de_viajes_15_meses,Day_of_the_week~member_casual,mean,value.var="ride_length")
+Tiempo_promedio_viaje_por_dia 
+```
+Aunque continua la tendencia de mayo tiempo de uso por parte de los miembros casuales, podemos ver que usan más el sevicio los fines de semana, el tiempo que usan los miembros es practicamente el mismo.
+
+
+Numero de viajes por día según usuario:
+```{r}
+Viajes_por_dia <- dcast(Base_de_viajes_15_meses,Day_of_the_week~member_casual,sum,value.var="n")
+Viajes_por_dia
+```
+el numero de usuarios casuales aumenta sobre el fin de semana, los miembros disminuyen el uso estos días.
+
+Podemos analizar el comportamiento de los usuarios, miremos que promedio de uso tienen segun la temporada:
+
+```{r}
+
+Viajes_por_temporada <- dcast(Base_de_viajes_15_meses,member_casual~Months,mean,value.var = 'ride_length')
+Viajes_por_temporada
+```
+Es una variable interesante, con el paso del tiempo, los usuarios casuales han disminuido su tiempo de uso de más de 20 minutos a casi 15 en promedio.
+
+
+## El clima en chicago:##
+
+De acuerdo a la siguiente fuente: 
+
+https://es.weatherspark.com/y/14091/Clima-promedio-en-Chicago-Illinois-Estados-Unidos-durante-todo-el-a%C3%B1o#Figures-Summary
+
+La ciudad es muy fria los meses de Diciembre - Enero - Febrero, fría en Marzo, Fresca en Abril y mayo, Caliente de Junio a Septiembre, Fresca en Octubre y fría en noviembre.
+
+## Turismo ##
+
+También he revisado la siguiente página:
+
+https://www.usawelcome.net/es/explora/chicago/bueno-saber-chi/el-mejor-momento-para-visitar-chicago.htm
+
+donde informan que la afluencia de turistas se presenta más a mitad de año
+
+
+
+### Punto 5: **Compartir**
+
+Inicialmente, voy a organizar los dias de la semana en un orden logico de lunes a domingo:
+
+```{r}
+Base_de_viajes_15_meses$Day_of_the_week=factor(Base_de_viajes_15_meses$Day_of_the_week,levels=c('lunes','martes','miércoles','jueves','viernes','sábado','domingo'))
+```
+
+A continuación voy a realizar una grafica que relacione la clase de miembros que realizan los viajes con los dias de la semana que los realizan:
+
+```{r}
+
+ggplot(data=Base_de_viajes_15_meses)+geom_bar(aes(x=Day_of_the_week,color=member_casual,fill=member_casual))+theme(axis.text.x=element_text(angle=90))+labs(x = "día de la semana", y = "viajes realizados",title ="Viajes realizados según tipo de usuario",subtitle = "Enero de 2022 a Marzo 2023")
+
+```
+A medida que avanza la semana y llega el fin de semana, aumentan los usuarios casuales y dismunyen los miembros, esto nos podria estar diciendo que los miembros utilizan el servicio mucho mas para temas laborales y los casuales para fines recreativos.
+
+
+También podemos dividir los datos segun el mes y el año en el cual se presentan:
+
+```{r}
+
+ggplot(data=Base_de_viajes_15_meses)+geom_bar(aes(x=Months,color=member_casual,fill=member_casual))+theme(axis.text.x=element_text(angle=90))+labs(x = "Año - Mes", y = "viajes realizados",title ="Viajes realizados según tipo de usuario y mes",subtitle = "Enero de 2022 a Marzo 2023")
+
+```
+Segun se puede ver, el uso del servicio aumenta en los meses de mejor clima del año, con una clara tendencia de los miembros casuales a incrementar el uso en primavera / verano.
+
+Teniendo en cuenta que la compañia alquila 3 tipos de bicicletas, quisieramos ver como se distribuyen los viajes segun el tipo de usuario:
+
+```{r}
+ggplot(data=Base_de_viajes_15_meses)+geom_bar(aes(x=rideable_type,color=member_casual,fill=member_casual))+theme(axis.text.x=element_text(angle=90))+labs(x = "Tipo de bicicleta", y = "viajes realizados",title ="Viajes realizados según tipo de usuario y tipo de bicicleta",subtitle = "Enero de 2022 a Marzo 2023")
+```
+Los miembros tienen preferencia por las bicicletas clasicas, en los usuarios casuales esta mejor distribuido.
+
+
+Para analizar el comportamiento de los viajes por año y día de la semana crearemos estos datos:
+
+
+```{r}
+
+options(dplyr.summarise.inform = FALSE)  #anular el mensaje de error de Group_by
+
+Usuario_duracion_mes  <- group_by(Base_de_viajes_15_meses,member_casual,Months,Day_of_the_week) %>%
+                    summarise(Viajes = sum(n)
+                              )
+
+Usuario_duracion_mes
+                                    
+
+```
+
+
+```{r}
+
+
+ggplot(Usuario_duracion_mes,aes(Day_of_the_week,Months,fill=Viajes))+geom_tile() + facet_wrap(~member_casual)+theme(axis.text.x=element_text(angle=90))
+```
+Podemos observar que la mayor concentracion de viajes de las dos categorias de usuarios se dan en mitad de año pero la actividad del miembro suscrito es más presente durante el año
+
+
+Revisaremos la evolución de la duración de los viajes:
+
+```{r}
+
+
+ggplot(data=Base_de_viajes_15_meses)+geom_bar(aes(x=Hour,color=member_casual,fill=member_casual))+theme(axis.text.x=element_text(angle=90))+labs(x = "Hora del día", y = "viajes realizados",title ="Viajes realizados según tipo de usuario y hora del día",subtitle = "Enero de 2022 a Marzo 2023")
+
+
+```
+
+La mayor parte de los viajes se realizan temprano entre 6 a 9 o en la tarde de 4 a 7 pm.
+
+
+
+
+
+
+```{r}
+
+Duración_de_viaje_por_usuario_y_mes  <- group_by(Base_de_viajes_15_meses,member_casual,Months) %>%
+                                           summarise(Duracion_promedio = mean(ride_length)
+                                             )
+Duración_de_viaje_por_usuario_y_mes
+
+```
+```{r}
+
+ggplot(data=Duración_de_viaje_por_usuario_y_mes,aes(x=Months,y=Duracion_promedio))+geom_col()+facet_wrap(~member_casual)+theme(axis.text.x=element_text(angle=90))+labs(x = "Hora del día", y = "Duración promedio en minutos",title ="Duración de viajes según tipo de usuario y mes",subtitle = "Enero de 2022 a Marzo 2023")
+
+
+```
+
+Constantemente, los miembros casuales hacen viajes más largos que los suscriptores
+
+### Punto 6: **Actuar**
+
+## Conclusiones##
+
+Al inspeccionar los diferentes comportamientos de los usuarios podemos sacar varias conclusiones:
+
+1. Los miembros utilizan el servicio en mayor medida los días laborales y aunque hay afluencia en los meses de buen clima, una parte de los usuarios utiliza el servicio tambien en invierno, sus viajes duran entre 11 y 15 minutos
+
+2. Los usuarios casuales utilizan el servicio más el fin de semana, y en mayor medida en los meses de mejor clima, el uso en invierno no es significativo. Sus viajes duran entre 20 y 25 minutos
+
+3. Si nos enfocamos en los tipos de bicicletas. los miembros utilizan en mayor medida las bicicletas clasicas, los casuales utilizan en su medida los dos tipos de bicicletas.
+
+4. Los viajes se realizan en una parte a primera hora del día, pero la mayor afluencia entre las 4 y 6 PM
+
+
+
+Aplicación:
+
+##INVIERNO##
+
+Si el uso de las bicicletas disminuye en invierno, puede que algunas personas se desanimen de una membresía anual por que no usan el servicio todo el año? vale la pena incentivar el uso de las bicicletas en invierno y revisar si las bicicletas si estan preparadas para el invierno
+
+##VACACIONES
+
+Teniendo en cuenta que los periodos vacacionales y de verano tienen más miembros casuales, conviene evaluar si se pueden hacer membresías especiales para las epocas de verano. o membresias de 9 o 6 meses teniendo en cuenta este factor.
+
+Según las tendencias de uso, los miembros se orientan mas a las horas y días hábiles, vale la pena estudiar cuales son las zonas donde más se concentran las oficinas y el comercio de la ciudad para instalar más estaciones de bicicletas.
+
+De igual manera, se puede pensar en ampliar las estaciones en lugares de alto flujo de turistas para la epoca de verano.
+
+##FIDELIZACION##
+
+Pero la clave del negocio se encuentra en la fidelización de los clientes que pagan su membresia y lo siguen haciendo año tras año, Cyclistic debe implementar formas de incentivar que los clientes renueven su suscripción y se mantengan fieles a la marca. 
+
+Un cliente fiel es un cliente que puede llegar a recomendar el servicio y teniendo en cuenta que los miembros utilizan el servicio en días de oficina, lo más probable es que tengan compañeros a los cuales recomendar el servicio.
+
+Un miembro leal podria tener beneficios:
+
+- Prioridad para el uso de bicicletas en caso de congestión.
+- DEscuento en su membresia por antiguedad, o por recomendación de un colega.
+- Beneficios por realizar el pago por anticipado.
+
+
+Vamos a salvar el mundo con un suscriptor a la vez! para cuidar el planeta
+
+
+*He finalizado este Markdown como parte del proyecto final de coursera de Análisis de datos en abril de 2023* 
